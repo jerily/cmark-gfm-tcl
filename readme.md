@@ -2,6 +2,8 @@
 
 A Tcl/C/C++ extension for rendering Markdown to HTML with GFM tables and normalizing CommonMark. It uses the external cmark-gfm core and extension libraries.
 
+This extension was generated with help from AI.
+
 The extension supports Tcl 8.6 and Tcl 9, with a separate build for each major ABI. Shared builds use Tcl stubs and provide a loadable `cmark_gfm` package. Static builds support embedding in Tcl hosts and native C/C++ applications.
 
 ## Tcl API
