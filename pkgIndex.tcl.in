@@ -1,0 +1,2 @@
+package ifneeded cmark_gfm @PROJECT_VERSION@ \
+    [list load [file join $dir libtclcmarkgfm[info sharedlibextension]] Tclcmarkgfm]

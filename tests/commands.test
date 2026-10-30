@@ -1,0 +1,113 @@
+package require tcltest 2
+package require cmark_gfm 0.1.0
+namespace import ::tcltest::test
+
+test package-1.1 {package version and command surface} -body {
+    list [package present cmark_gfm] [lsort [info commands ::cmark_gfm::*]]
+} -result {0.1.0 {::cmark_gfm::normalize_commonmark ::cmark_gfm::render_gfm_html}}
+
+test render-1.1 {headings, emphasis, escaping} -body {
+    ::cmark_gfm::render_gfm_html "# Title\n\n**bold** & < >"
+} -result "<h1>Title</h1>\n<p><strong>bold</strong> &amp; &lt; &gt;</p>\n"
+
+test render-1.2 {GFM tables} -body {
+    set html [::cmark_gfm::render_gfm_html "| A | B |\n| - | - |\n| 1 | 2 |\n"]
+    list [string match *<table>* $html] [string match *<th>A</th>* $html] \
+         [string match *<td>2</td>* $html]
+} -result {1 1 1}
+
+test render-1.3 {empty input} -body {
+    ::cmark_gfm::render_gfm_html {}
+} -result {}
+
+test render-1.4 {raw HTML is omitted by default} -body {
+    string match *<script>* [::cmark_gfm::render_gfm_html {<script>alert(1)</script>}]
+} -result 0
+
+test render-1.5 {unsafe links are omitted by default} -body {
+    string match *javascript:* [::cmark_gfm::render_gfm_html {[click](javascript:alert%281%29)}]
+} -result 0
+
+test render-1.6 {Unicode including supplementary characters} -body {
+    set text [encoding convertfrom utf-8 [binary decode hex 636166c3a920f09f9880]]
+    expr {[::cmark_gfm::render_gfm_html $text] eq "<p>$text</p>\n"}
+} -result 1
+
+test render-1.7 {embedded NUL is replaced without truncation} -body {
+    ::cmark_gfm::render_gfm_html "a\u0000b"
+} -result "<p>a\ufffdb</p>\n"
+
+test render-1.8 {preserve the source module's table-only extension set} -body {
+    ::cmark_gfm::render_gfm_html {~~text~~}
+} -result "<p>~~text~~</p>\n"
+
+test render-1.9 {wrong argument count} -body {
+    ::cmark_gfm::render_gfm_html
+} -returnCodes error -errorCode {TCL WRONGARGS} \
+  -result {wrong # args: should be "::cmark_gfm::render_gfm_html markdown"}
+
+test render-1.10 {extra arguments} -body {
+    ::cmark_gfm::render_gfm_html a b
+} -returnCodes error -errorCode {TCL WRONGARGS} \
+  -result {wrong # args: should be "::cmark_gfm::render_gfm_html markdown"}
+
+test normalize-1.1 {trim ASCII whitespace} -body {
+    ::cmark_gfm::normalize_commonmark " \t\nplain text\r\f\v "
+} -result {plain text}
+
+test normalize-1.2 {whitespace only} -body {
+    ::cmark_gfm::normalize_commonmark " \t\r\n\f\v"
+} -result {}
+
+test normalize-1.3 {empty input} -body {
+    ::cmark_gfm::normalize_commonmark {}
+} -result {}
+
+test normalize-1.4 {canonical heading} -body {
+    ::cmark_gfm::normalize_commonmark "Title\n=====\n"
+} -result {# Title}
+
+test normalize-1.5 {reference-only fallback} -body {
+    ::cmark_gfm::normalize_commonmark { [ref]: /url }
+} -result {[ref]: /url}
+
+test normalize-1.6 {Unicode survives normalization} -body {
+    set text [encoding convertfrom utf-8 [binary decode hex 636166c3a920f09f9880]]
+    expr {[::cmark_gfm::normalize_commonmark "  $text  "] eq $text}
+} -result 1
+
+test normalize-1.7 {NUL survives the Tcl boundary for cmark replacement} -body {
+    ::cmark_gfm::normalize_commonmark "a\u0000b"
+} -result "a\ufffdb"
+
+test normalize-1.8 {wrong argument count} -body {
+    ::cmark_gfm::normalize_commonmark
+} -returnCodes error -errorCode {TCL WRONGARGS} \
+  -result {wrong # args: should be "::cmark_gfm::normalize_commonmark markdown"}
+
+test normalize-1.9 {extra arguments} -body {
+    ::cmark_gfm::normalize_commonmark a b
+} -returnCodes error -errorCode {TCL WRONGARGS} \
+  -result {wrong # args: should be "::cmark_gfm::normalize_commonmark markdown"}
+
+test interp-1.1 {load and render in independent interpreters, shared or static} -body {
+    set library {}
+    foreach loaded [info loaded] {
+        if {[lindex $loaded 1] eq "Tclcmarkgfm"} {
+            set library [lindex $loaded 0]
+        }
+    }
+    set results {}
+    for {set i 0} {$i < 5} {incr i} {
+        set child [interp create]
+        try {
+            $child eval [list load $library Tclcmarkgfm]
+            lappend results [$child eval {::cmark_gfm::normalize_commonmark {  text  }}]
+        } finally {
+            interp delete $child
+        }
+    }
+    set results
+} -result {text text text text text}
+
+::tcltest::cleanupTests
